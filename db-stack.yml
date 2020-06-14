@@ -1,0 +1,85 @@
+version: '3.7'
+
+services:
+
+  postgres:
+    image: postgres:12.3    
+    volumes:
+      - postgres-data:/var/lib/postgresql/data  
+    environment: 
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-passwd
+    networks: 
+      - net
+    secrets:
+      - postgres-passwd
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == data-worker
+      restart_policy:
+        condition: on-failure 
+      update_config:
+        order: start-first 
+      resources:
+        reservations:
+          cpus: '0.1'  
+          memory: 128m
+        limits:
+          cpus: '1.0'
+          memory: 512m         
+    
+  pgadmin:
+    image: dpage/pgadmin4:4.22 
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin   
+    environment: 
+      PGADMIN_DEFAULT_EMAIL: pgadmin@docker.local
+      PGADMIN_DEFAULT_PASSWORD: pgadmin
+    networks: 
+      - net        
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == data-worker
+      labels:
+        traefik.http.routers.pgadmin.rule: Host(`${PGADMIN_HOST}`) 
+        traefik.http.routers.pgadmin.entrypoints: http
+        traefik.http.routers.pgadmin.service: pgadmin
+        traefik.enable: 'true'
+        traefik.http.services.pgadmin.loadbalancer.server.port: '80'
+      restart_policy:
+        condition: on-failure 
+      update_config:
+        order: start-first 
+      resources:
+        reservations:
+          cpus: '0.1'   
+          memory: 128m
+        limits:
+          cpus: '0.5'
+          memory: 512m 
+
+
+networks:
+  net:
+    external: true
+
+
+secrets:
+  postgres-passwd:
+    file: postgres-passwd
+
+
+volumes:
+  postgres-data:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /data/postgres-data
+  pgadmin-data:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /data/pgadmin-data 
+
+  

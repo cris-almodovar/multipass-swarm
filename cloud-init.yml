@@ -1,0 +1,30 @@
+package_update: true
+package_upgrade: true
+package_reboot_if_required: true
+
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg-agent
+  - software-properties-common  
+
+runcmd:
+  - export DEBIAN_FRONTEND=noninteractive
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+  - add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+  - apt-get update -y
+  - apt-get install docker-ce -y
+  - curl -L https://github.com/docker/compose/releases/download/1.26.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+  - chmod +x /usr/local/bin/docker-compose
+  - curl -fsSL https://raw.githubusercontent.com/MatchbookLab/local-persist/master/scripts/install.sh | sudo bash
+  - usermod -aG docker ubuntu
+  - curl -L https://raw.githubusercontent.com/madcoda/dotenv-shell/master/dotenv.sh -o /usr/local/bin/dotenv
+  - chmod +x /usr/local/bin/dotenv
+  - echo "*    -    nproc    4096" >> /etc/security/limits.conf
+  - echo "*    -    nofile   65535" >> /etc/security/limits.conf
+  - echo "*    -    fsize    unlimited" >> /etc/security/limits.conf
+  - echo "*    -    as       unlimited" >> /etc/security/limits.conf
+  - echo "vm.max_map_count=262144" >> /etc/sysctl.conf
+  - echo "vm.swappiness=1" >> /etc/sysctl.conf
+  - reboot

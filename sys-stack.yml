@@ -1,0 +1,173 @@
+version: '3.7'
+
+services:
+
+  swarmpit-ui:
+    image: swarmpit/swarmpit:1.9
+    environment:
+      SWARMPIT_DB: http://couchdb:5984
+      SWARMPIT_INFLUXDB: http://influxdb:8086
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - net    
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        traefik.http.routers.swarmpit-ui.rule: Host(`${SWARMPIT_HOST}`) 
+        traefik.http.routers.swarmpit-ui.entrypoints: http
+        traefik.http.routers.swarmpit-ui.service: swarmpit-ui
+        traefik.enable: 'true'
+        traefik.http.services.swarmpit-ui.loadbalancer.server.port: '8080'
+      restart_policy:
+        condition: on-failure 
+      update_config:
+        order: start-first   
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128m      
+        limits:
+          cpus: '0.5'
+          memory: 512m
+
+  couchdb:
+    image: couchdb:2.3.0
+    volumes:
+      - couchdb-data:/opt/couchdb/data
+    networks:
+      - net
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == data-worker  
+      restart_policy:
+        condition: on-failure  
+      update_config:
+        order: start-first        
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128m      
+        limits:
+          cpus: '0.5'
+          memory: 256m          
+
+  influxdb:
+    image: influxdb:1.7
+    volumes:
+      - influxdb-data:/var/lib/influxdb
+    networks:
+      - net
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == data-worker
+      restart_policy:
+        condition: on-failure
+      update_config:
+        order: start-first                
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128m      
+        limits:
+          cpus: '0.5'
+          memory: 256m
+
+  swarmpit-agent:
+    image: swarmpit/agent:2.2
+    environment:
+      DOCKER_API_VERSION: '1.35'
+      EVENT_ENDPOINT: http://swarmpit-ui:8080/events
+      HEALTH_CHECK_ENDPOINT: http://swarmpit-ui:8080/version
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - net
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+      update_config:
+        order: start-first      
+      labels:
+        swarmpit.agent: 'true'
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 32m      
+        limits:
+          cpus: '0.25'
+          memory: 128m
+
+  traefik:
+    image: traefik:v2.2   
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - net 
+    secrets:
+      - traefik-users    
+    ports:
+      - target: 80
+        published: 80
+        mode: host
+    command:
+      - --providers.docker
+      - --providers.docker.exposedbydefault=false      
+      - --providers.docker.swarmmode      
+      - --entrypoints.http.address=:80 
+      - --accesslog
+      - --log      
+      - --api    
+    deploy:
+      mode: global
+      labels:
+        traefik.http.routers.api.rule: Host(`${TRAEFIK_HOST}`)
+        traefik.http.services.traefik.loadbalancer.server.port: '8080'
+        traefik.http.routers.api.middlewares: auth
+        traefik.http.routers.api.service: api@internal
+        traefik.http.middlewares.auth.basicauth.usersfile: /run/secrets/traefik-users
+        traefik.enable: 'true'
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure      
+      update_config:
+        order: stop-first
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128m      
+        limits:
+          cpus: '1.0'
+          memory: 256m 
+
+
+networks:
+  net:
+    external: true
+
+
+secrets:
+  traefik-users:
+    file: traefik-users  
+
+    
+volumes:
+  couchdb-data:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /data/couchdb-data  
+  influxdb-data:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /data/influxdb-data 
+  
