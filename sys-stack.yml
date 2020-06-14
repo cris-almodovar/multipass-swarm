@@ -10,7 +10,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - net    
+      - internal 
+      - edge   
     deploy:
       replicas: 1
       placement:
@@ -39,7 +40,7 @@ services:
     volumes:
       - couchdb-data:/opt/couchdb/data
     networks:
-      - net
+      - internal
     deploy:
       replicas: 1
       placement:
@@ -62,7 +63,7 @@ services:
     volumes:
       - influxdb-data:/var/lib/influxdb
     networks:
-      - net
+      - internal
     deploy:
       replicas: 1
       placement:
@@ -89,7 +90,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - net
+      - internal
     deploy:
       mode: global
       restart_policy:
@@ -111,7 +112,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - net 
+      - edge
     secrets:
       - traefik-users    
     ports:
@@ -121,7 +122,8 @@ services:
     command:
       - --providers.docker
       - --providers.docker.exposedbydefault=false      
-      - --providers.docker.swarmmode      
+      - --providers.docker.swarmmode   
+      - --providers.docker.network=edge   
       - --entrypoints.http.address=:80 
       - --accesslog
       - --log      
@@ -152,7 +154,9 @@ services:
 
 
 networks:
-  net:
+  internal:
+    external: true
+  edge:
     external: true
 
 

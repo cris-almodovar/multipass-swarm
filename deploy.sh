@@ -37,7 +37,8 @@ multipass mount ./ manager:/home/ubuntu/workspace
 # Let's create a Docker overlay network. All our Docker containers will communicate
 # over this virtual network.
 
-multipass exec manager -- docker network create --driver overlay --attachable net
+multipass exec manager -- docker network create --driver overlay --attachable internal
+multipass exec manager -- docker network create --driver overlay --attachable edge
 
 # Let's copy the environment file to the default location.
 multipass exec manager -- cp /home/ubuntu/workspace/.env /home/ubuntu/.env
