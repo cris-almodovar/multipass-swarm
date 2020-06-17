@@ -41,11 +41,14 @@ multipass exec manager -- docker network create --driver overlay --attachable in
 multipass exec manager -- docker network create --driver overlay --attachable edge
 
 # Let's copy the environment file to the default location.
-multipass exec manager -- cp /home/ubuntu/workspace/.env /home/ubuntu/.env
+multipass exec manager -- ln -s /home/ubuntu/workspace/.env /home/ubuntu/.env
 
-# Let's deploy the system services.
-multipass exec manager -- dotenv docker stack deploy -c /home/ubuntu/workspace/sys-stack.yml sys
+# Let's deploy the admin services.
+multipass exec manager -- dotenv docker stack deploy -c /home/ubuntu/workspace/admin.yml admin
 
 # Let's deploy the database services.
-multipass exec manager -- dotenv docker stack deploy -c /home/ubuntu/workspace/db-stack.yml db
+multipass exec manager -- dotenv docker stack deploy -c /home/ubuntu/workspace/database.yml database
+
+# Let's deploy Superset.
+multipass exec manager -- dotenv docker stack deploy -c /home/ubuntu/workspace/super.yml super
 

@@ -20,7 +20,7 @@ services:
       restart_policy:
         condition: on-failure 
       update_config:
-        order: start-first 
+        order: stop-first 
       resources:
         reservations:
           cpus: '0.1'  
@@ -53,7 +53,7 @@ services:
       restart_policy:
         condition: on-failure 
       update_config:
-        order: start-first 
+        order: stop-first 
       resources:
         reservations:
           cpus: '0.1'   
