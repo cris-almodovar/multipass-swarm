@@ -11,28 +11,27 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - internal 
-      - edge   
+      - public   
     deploy:
       replicas: 1
       placement:
         constraints:
           - node.role == manager
       labels:
-        traefik.http.routers.swarmpit-ui.rule: Host(`${SWARMPIT_HOST}`) 
-        traefik.http.routers.swarmpit-ui.entrypoints: http
-        traefik.http.routers.swarmpit-ui.service: swarmpit-ui
         traefik.enable: 'true'
+        traefik.http.routers.swarmpit-ui.entrypoints: web-secure
+        traefik.http.routers.swarmpit-ui.rule: Host(`${SWARMPIT_HOST}`) 
+        traefik.http.routers.swarmpit-ui.tls: 'true'
+        traefik.http.routers.swarmpit-ui.service: swarmpit-ui        
         traefik.http.services.swarmpit-ui.loadbalancer.server.port: '8080'
       restart_policy:
         condition: on-failure 
       update_config:
         order: stop-first   
       resources:
-        reservations:
-          cpus: '0.1'
+        reservations:         
           memory: 128m      
-        limits:
-          cpus: '0.5'
+        limits:          
           memory: 512m
 
   couchdb:
@@ -51,11 +50,9 @@ services:
       update_config:
         order: stop-first        
       resources:
-        reservations:
-          cpus: '0.1'
+        reservations:          
           memory: 128m      
-        limits:
-          cpus: '0.5'
+        limits:         
           memory: 256m          
 
   influxdb:
@@ -74,11 +71,9 @@ services:
       update_config:
         order: stop-first                
       resources:
-        reservations:
-          cpus: '0.1'
+        reservations:          
           memory: 128m      
-        limits:
-          cpus: '0.5'
+        limits:          
           memory: 256m
 
   swarmpit-agent:
@@ -100,11 +95,9 @@ services:
       labels:
         swarmpit.agent: 'true'
       resources:
-        reservations:
-          cpus: '0.1'
+        reservations:          
           memory: 32m      
-        limits:
-          cpus: '0.25'
+        limits:          
           memory: 128m
 
   traefik:
@@ -112,31 +105,45 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - edge
+      - public
     secrets:
-      - traefik-users    
+      - basic-auth-users    
     ports:
       - target: 80
         published: 80
+        mode: host
+      - target: 443
+        published: 443
         mode: host
     command:
       - --providers.docker
       - --providers.docker.exposedbydefault=false      
       - --providers.docker.swarmmode   
-      - --providers.docker.network=edge   
-      - --entrypoints.http.address=:80 
+      - --providers.docker.network=public
+      - --entrypoints.web.address=:80 
+      - --entrypoints.web-secure.address=:443
       - --accesslog
       - --log      
-      - --api    
+      - --api 
+      - --certificatesresolvers.letsencrypt.acme.email=cris@almodovar.info
+      - --certificatesresolvers.letsencrypt.acme.storage=/acme.json
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
     deploy:
       mode: global
       labels:
-        traefik.http.routers.api.rule: Host(`${TRAEFIK_HOST}`)
-        traefik.http.services.traefik.loadbalancer.server.port: '8080'
-        traefik.http.routers.api.middlewares: auth
-        traefik.http.routers.api.service: api@internal
-        traefik.http.middlewares.auth.basicauth.usersfile: /run/secrets/traefik-users
         traefik.enable: 'true'
+        traefik.http.routers.traefik-dashboard.entrypoints: web-secure
+        traefik.http.routers.traefik-dashboard.rule: Host(`${TRAEFIK_HOST}`) 
+        traefik.http.routers.traefik-dashboard.tls: 'true'
+        traefik.http.routers.traefik-dashboard.middlewares: traefik-auth
+        traefik.http.routers.traefik-dashboard.service: api@internal
+        traefik.http.middlewares.traefik-auth.basicauth.usersfile: /run/secrets/basic-auth-users
+        traefik.http.services.traefik-dashboard.loadbalancer.server.port: '8080'
+        traefik.http.routers.http_catchall.entrypoints: web
+        traefik.http.routers.http_catchall.rule: HostRegexp(`{any:.+}`)        
+        traefik.http.routers.http_catchall.middlewares: https_redirect
+        traefik.http.middlewares.https_redirect.redirectscheme.scheme: https
+        traefik.http.middlewares.https_redirect.redirectscheme.permanent: 'true'
       placement:
         constraints:
           - node.role == manager
@@ -145,24 +152,201 @@ services:
       update_config:
         order: stop-first
       resources:
-        reservations:
-          cpus: '0.1'
+        reservations:          
           memory: 128m      
-        limits:
-          cpus: '1.0'
+        limits:          
           memory: 256m 
 
+  cadvisor:
+    image: google/cadvisor:v0.33.0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/rootfs:ro
+      - /var/run:/var/run
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - internal
+    command: 
+      - -logtostderr 
+      - -docker_only
+    deploy:
+      mode: global
+      resources:
+        limits:
+          memory: 128m
+        reservations:
+          memory: 64m
+
+  grafana:
+    image: stefanprodan/swarmprom-grafana:5.3.4       
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - internal
+      - public   
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 128m
+        reservations:
+          memory: 64m
+      labels:
+        traefik.enable: 'true'   
+        traefik.http.routers.grafana.entrypoints: web-secure     
+        traefik.http.routers.grafana.rule: Host(`${GRAFANA_HOST}`)        
+        traefik.http.routers.grafana.tls: 'true'
+        traefik.http.routers.grafana.service: grafana
+        traefik.http.services.grafana.loadbalancer.server.port: '3000'
+
+  alertmanager:
+    image: stefanprodan/swarmprom-alertmanager:v0.15.3
+    volumes:
+      - alertmanager-data:/alertmanager
+    networks:
+      - internal
+      - public
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 128m
+        reservations:
+          memory: 64m
+      labels:
+        traefik.enable: 'true' 
+        traefik.http.routers.alertmanager.entrypoints: web-secure       
+        traefik.http.routers.alertmanager.rule:  Host(`${ALERTMANAGER_HOST}`)
+        traefik.http.routers.alertmanager.tls: 'true'
+        traefik.http.routers.alertmanager.middlewares: alertmanager-auth       
+        traefik.http.routers.alertmanager.service: alertmanager
+        traefik.http.services.alertmanager.loadbalancer.server.port: '9093'
+        traefik.http.middlewares.alertmanager-auth.basicauth.usersfile: /run/secrets/basic-auth-users
+        
+  unsee:
+    image: cloudflare/unsee:v0.9.2
+    environment:
+      ALERTMANAGER_URIS: default:http://alertmanager:9093
+    networks:
+      - internal
+      - public
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 128m
+        reservations:
+          memory: 64m
+      labels:
+        traefik.enable: 'true'     
+        traefik.http.routers.unsee.entrypoints: web-secure   
+        traefik.http.routers.unsee.rule: Host(`${UNSEE_HOST}`)        
+        traefik.http.routers.unsee.tls: 'true'   
+        traefik.http.routers.unsee.middlewares: unsee-auth  
+        traefik.http.routers.unsee.service: unsee
+        traefik.http.middlewares.unsee-auth.basicauth.usersfile: /run/secrets/basic-auth-users
+        traefik.http.services.unsee.loadbalancer.server.port: '8080'
+
+  node-exporter:
+    image: stefanprodan/swarmprom-node-exporter:v0.16.0    
+    environment:
+      NODE_ID: '{{.Node.ID}}'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      - /etc/hostname:/etc/nodename
+    networks:
+      - internal
+    command:
+      - --path.sysfs=/host/sys
+      - --path.procfs=/host/proc
+      - --collector.textfile.directory=/etc/node-exporter/
+      - --collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)
+      - --no-collector.ipvs
+    deploy:
+      mode: global
+      resources:
+        limits:
+          memory: 128m
+        reservations:
+          memory: 64m
+
+  prometheus:
+    image: stefanprodan/swarmprom-prometheus:v2.5.0
+    volumes:
+      - prometheus-data:/prometheus
+    networks:
+      - internal
+      - public
+    configs:
+      - source: node_rules
+        target: /etc/prometheus/swarm_node.rules.yml
+      - source: task_rules
+        target: /etc/prometheus/swarm_task.rules.yml
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention=${PROMETHEUS_RETENTION}
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 2048m
+        reservations:
+          memory: 128m
+      labels:
+        traefik.enable: 'true'
+        traefik.http.routers.prometheus.rule: Host(`${PROMETHEUS_HOST}`)
+        traefik.http.routers.prometheus.entrypoints: web-secure
+        traefik.http.routers.prometheus.tls: 'true'  
+        traefik.http.routers.prometheus.middlewares: prometheus-auth
+        traefik.http.routers.prometheus.service: prometheus     
+        traefik.http.middlewares.prometheus-auth.basicauth.usersfile: /run/secrets/basic-auth-users
+        traefik.http.services.prometheus.loadbalancer.server.port: '9090'        
+                
 
 networks:
   internal:
     external: true
-  edge:
+  public:
     external: true
 
 
+configs:  
+  node_rules:
+    file: ./prometheus/rules/swarm_node.rules.yml
+  task_rules:
+    file: ./prometheus/rules/swarm_task.rules.yml
+
+
 secrets:
-  traefik-users:
-    file: traefik-users  
+  basic-auth-users:
+    file: basic-auth-users 
 
     
 volumes:
@@ -174,4 +358,16 @@ volumes:
     driver: local-persist
     driver_opts:
       mountpoint: /data/influxdb-data 
+  prometheus-data: 
+    driver: local-persist
+    driver_opts:
+      mountpoint: /data/prometheus-data
+  grafana-data: 
+    driver: local-persist
+    driver_opts:
+      mountpoint: /data/grafana-data 
+  alertmanager-data: 
+    driver: local-persist
+    driver_opts:
+      mountpoint: /data/alertmanager-data 
   

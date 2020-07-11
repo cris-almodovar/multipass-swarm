@@ -2,29 +2,6 @@ version: '3.7'
 
 services:
 
-  redis:
-    image: redis:6.0.5
-    volumes:
-     - redis-data:/data
-    networks:
-     - internal
-    deploy:
-      replicas: 1
-      placement:
-        constraints:
-         - node.hostname == app-worker  
-      restart_policy:
-        condition: on-failure  
-      update_config:
-        order: stop-first        
-      resources:
-        reservations:
-          cpus: '0.1'
-          memory: 128m      
-        limits:
-          cpus: '0.5'
-          memory: 256m
-  
   superset:
     image: amancevice/superset:0.35.2
     hostname: superset
@@ -77,10 +54,3 @@ configs:
 secrets:
   superset-postgres-passwd:
     file: superset-postgres-passwd 
-
-
-volumes:
-  redis-data:
-    driver: local-persist
-    driver_opts:
-      mountpoint: /data/redis-data 

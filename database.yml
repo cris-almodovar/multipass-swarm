@@ -8,6 +8,11 @@ services:
       - postgres-data:/var/lib/postgresql/data  
     environment: 
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres-passwd
+    volumes:
+      - type: tmpfs
+        target: /dev/shm
+        tmpfs:
+          size: 67108864  # 64MB
     networks: 
       - internal
     secrets:
@@ -38,17 +43,18 @@ services:
       PGADMIN_DEFAULT_PASSWORD: pgadmin
     networks: 
       - internal      
-      - edge  
+      - public  
     deploy:
       replicas: 1
       placement:
         constraints:
           - node.hostname == data-worker
       labels:
-        traefik.http.routers.pgadmin.rule: Host(`${PGADMIN_HOST}`) 
-        traefik.http.routers.pgadmin.entrypoints: http
-        traefik.http.routers.pgadmin.service: pgadmin
         traefik.enable: 'true'
+        traefik.http.routers.pgadmin.entrypoints: web-secure
+        traefik.http.routers.pgadmin.rule: Host(`${PGADMIN_HOST}`)  
+        traefik.http.routers.pgadmin.tls: 'true'      
+        traefik.http.routers.pgadmin.service: pgadmin        
         traefik.http.services.pgadmin.loadbalancer.server.port: '80'
       restart_policy:
         condition: on-failure 
@@ -62,11 +68,34 @@ services:
           cpus: '0.5'
           memory: 512m 
 
+  redis:
+    image: redis:6.0.5
+    volumes:
+      - redis-data:/data
+    networks:
+      - internal
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == app-worker  
+      restart_policy:
+        condition: on-failure  
+      update_config:
+        order: stop-first        
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128m      
+        limits:
+          cpus: '0.5'
+          memory: 256m
+
 
 networks:
   internal:
     external: true
-  edge:
+  public:
     external: true
 
 secrets:
@@ -83,5 +112,8 @@ volumes:
     driver: local-persist
     driver_opts:
       mountpoint: /data/pgadmin-data 
-
+  redis-data:
+    driver: local-persist
+    driver_opts:
+      mountpoint: /data/redis-data 
   

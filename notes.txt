@@ -1,0 +1,3 @@
+superset fab create-admin --username admin --firstname Admin --lastname User --email admin@docker.local --password admin
+superset db upgrade
+superset init

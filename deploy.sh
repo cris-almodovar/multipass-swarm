@@ -38,7 +38,7 @@ multipass mount ./ manager:/home/ubuntu/workspace
 # over this virtual network.
 
 multipass exec manager -- docker network create --driver overlay --attachable internal
-multipass exec manager -- docker network create --driver overlay --attachable edge
+multipass exec manager -- docker network create --driver overlay --attachable public
 
 # Let's copy the environment file to the default location.
 multipass exec manager -- ln -s /home/ubuntu/workspace/.env /home/ubuntu/.env
@@ -52,3 +52,4 @@ multipass exec manager -- dotenv docker stack deploy -c /home/ubuntu/workspace/d
 # Let's deploy Superset.
 multipass exec manager -- dotenv docker stack deploy -c /home/ubuntu/workspace/super.yml super
 
+# TODO: write to .bashrc instead of using dotenv
